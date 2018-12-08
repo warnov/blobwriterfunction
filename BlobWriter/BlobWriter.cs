@@ -1,17 +1,13 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage;
-using System.Web.Http;
+using System.Threading.Tasks;
 
-namespace BlobWriter
+namespace FileTransformer
 {
     public static class BlobWriter
     {
@@ -99,7 +95,7 @@ C | LINEARESUMEN | BI1000048832201809262006170.00010.00020.00030.000.00830114921
             }
             catch
             {                
-                return ReturnException("Bad filesCount parameter", log);
+                return CrossUtils.ReturnException("Bad filesCount parameter", log);
             }
 
             if (CloudStorageAccount.TryParse(blobConnectionString, out CloudStorageAccount cloudStorageAccount))
@@ -119,16 +115,10 @@ C | LINEARESUMEN | BI1000048832201809262006170.00010.00020.00030.000.00830114921
             }
             else
             {
-                return ReturnException("Bad connection string", log);                
+                return CrossUtils.ReturnException("Bad connection string", log);                
             }
 
             return new OkObjectResult($"{filesCount} Files written");
-        }
-
-        private static IActionResult ReturnException(string msg, ILogger log)
-        {           
-            log.LogError(msg);
-            return new ExceptionResult(new Exception(msg), true);
         }
     }
 }
