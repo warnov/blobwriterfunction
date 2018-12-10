@@ -100,7 +100,7 @@ namespace FileTransformer
                             blobClient, destinyContainerName, destinyBlobRootName);
                     }                    
                 }
-                catch(Exception exc)
+                catch
                 {
                     return CrossUtils.ReturnException("Problem reading origin blob", log);
                 }
