@@ -91,14 +91,26 @@ namespace FileTransformer
                     var fileContent = await originBlob.DownloadTextAsync();
                     var bills = new List<string>(fileContent.Split("FINDOCUM"));
                     billsCount = bills.Count;
-                    for (int i = 0, batchNumber = 0; i < billsCount; i += batchSize, batchNumber++)
+                    //for (int i = 0, batchNumber = 0; i < billsCount; i += batchSize, batchNumber++)
+                    //{
+                    //    var offset = i + batchSize > billsCount ? billsCount - i : batchSize;
+                    //    var batchDataList = bills.GetRange(i, offset);
+                    //    var batchDataJsonString = JsonConvert.SerializeObject(batchDataList);
+                    //    ProcessBatchDataString(batchDataJsonString, batchNumber,
+                    //        blobClient, destinyContainerName, destinyBlobRootName);
+                    //}  
+                    int batchNumber = 0;
+                    Parallel.For(0, billsCount, i =>
                     {
+
                         var offset = i + batchSize > billsCount ? billsCount - i : batchSize;
                         var batchDataList = bills.GetRange(i, offset);
                         var batchDataJsonString = JsonConvert.SerializeObject(batchDataList);
                         ProcessBatchDataString(batchDataJsonString, batchNumber,
                             blobClient, destinyContainerName, destinyBlobRootName);
-                    }                    
+                        i += batchSize;
+                        batchNumber++;
+                    });
                 }
                 catch
                 {
