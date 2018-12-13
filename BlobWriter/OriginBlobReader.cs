@@ -5,7 +5,6 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Blob;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -34,7 +33,7 @@ namespace FileTransformer
         {
 
             #region Reading conf and params
-        
+
             var config = new ConfigurationBuilder()
                         .SetBasePath(context.FunctionAppDirectory)
                         .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true)
@@ -58,8 +57,8 @@ namespace FileTransformer
             {
                 return CrossUtils.ReturnException("Bad parameters", log);
             }
-           
-            int batchSize = 0;            
+
+            int batchSize = 0;
             try
             {
                 //writerFunctionURI = new Uri(config["writerFunctionURL"]);
@@ -78,61 +77,58 @@ namespace FileTransformer
             if (CloudStorageAccount.TryParse(blobConnectionString, out CloudStorageAccount cloudStorageAccount))
             {
                 var blobClient = cloudStorageAccount.CreateCloudBlobClient();
-
+                var destinyContainer = blobClient.GetContainerReference(destinyContainerName);
+                try
+                {
+                    await destinyContainer.CreateIfNotExistsAsync();
+                }
+                catch (Exception exc)
+                {
+                    return CrossUtils.ReturnException($"Problem creating destiny container: {exc.Message}", log);
+                }
 
                 //Processing origin blob into batches of lists
+                var fileContent = string.Empty;
                 try
                 {
                     var originContainer = blobClient.GetContainerReference(originContainerName);
                     var originBlob = originContainer.GetBlockBlobReference(originBlobName);
-                    BlobContinuationToken blobContinuationToken = null;
-                    var listb = await originContainer.ListBlobsSegmentedAsync(null, blobContinuationToken);
-                    blobContinuationToken = listb.ContinuationToken;
-                    var fileContent = await originBlob.DownloadTextAsync();
-                    var bills = new List<string>(fileContent.Split("FINDOCUM"));
-                    billsCount = bills.Count;
-                    //for (int i = 0, batchNumber = 0; i < billsCount; i += batchSize, batchNumber++)
-                    //{
-                    //    var offset = i + batchSize > billsCount ? billsCount - i : batchSize;
-                    //    var batchDataList = bills.GetRange(i, offset);
-                    //    var batchDataJsonString = JsonConvert.SerializeObject(batchDataList);
-                    //    ProcessBatchDataString(batchDataJsonString, batchNumber,
-                    //        blobClient, destinyContainerName, destinyBlobRootName);
-                    //}  
-                    int batchNumber = 0;
-                    Parallel.For(0, billsCount, i =>
-                    {
-
-                        var offset = i + batchSize > billsCount ? billsCount - i : batchSize;
-                        var batchDataList = bills.GetRange(i, offset);
-                        var batchDataJsonString = JsonConvert.SerializeObject(batchDataList);
-                        ProcessBatchDataString(batchDataJsonString, batchNumber,
-                            blobClient, destinyContainerName, destinyBlobRootName);
-                        i += batchSize;
-                        batchNumber++;
-                    });
+                    fileContent = await originBlob.DownloadTextAsync();
                 }
                 catch
                 {
                     return CrossUtils.ReturnException("Problem reading origin blob", log);
                 }
+
+                //Creating a blob for each batch of elements in the list
+                var bills = new List<string>(fileContent.Split("FINDOCUM"));
+                billsCount = bills.Count;
+                var batchCount = (int)Math.Ceiling((double)billsCount / (double)batchSize);
+                Parallel.For(0, batchCount, i =>
+                {
+                    var currentPos = i * batchSize;
+                    var offset = currentPos + batchSize > billsCount ? billsCount - currentPos : batchSize;
+                    var batchDataList = bills.GetRange(currentPos, offset);
+                    var batchDataJsonString = JsonConvert.SerializeObject(batchDataList);
+                    var destinyBlobName = $"{i}-{destinyBlobRootName}.json";
+                    var blob = destinyContainer.GetBlockBlobReference(destinyBlobName);
+                    _ = blob.UploadTextAsync(batchDataJsonString);
+                });
             }
             else
             {
                 return CrossUtils.ReturnException("Bad connection string", log);
             }
-
             return new OkObjectResult($"{billsCount} bills processed");
         }
 
-        private static async void ProcessBatchDataString(string batchDataJsonString, int batchNumber, 
-            CloudBlobClient blobClient, string destinyContainerName, string destinyBlobRootName)
-        {
-            var container = blobClient.GetContainerReference(destinyContainerName);
-            await container.CreateIfNotExistsAsync();
-            var blobName = $"{batchNumber}-{destinyBlobRootName}.json";
-            var blob = container.GetBlockBlobReference(blobName);
-            _ = blob.UploadTextAsync(batchDataJsonString);
-        }
     }
+    /* private static async void ProcessBatchDataString(string batchDataJsonString, int batchNumber, 
+         CloudBlobContainer destinyContainer, string destinyBlobRootName)
+     {
+         var blobName = $"{batchNumber}-{destinyBlobRootName}.json";
+         var blob = destinyContainer.GetBlockBlobReference(blobName);
+         _ = blob.UploadTextAsync(batchDataJsonString);
+     }*/
+
 }
